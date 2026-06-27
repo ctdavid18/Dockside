@@ -213,6 +213,8 @@ nav button.active{color:white;border-bottom-color:var(--seafoam)}
       <button class="btn btn-primary btn-sm" onclick="markReady()">Mark ready</button>
       <button class="btn btn-secondary btn-sm" onclick="markPickedUp()">Mark picked up</button>
       <button class="btn btn-secondary btn-sm" onclick="markPaid()">Mark paid</button>
+      <button class="btn btn-secondary btn-sm" onclick="openEditModal(currentRecord && currentRecord.id)">Edit record</button>
+      <button class="btn btn-success btn-sm" id="save-edit-btn" style="display:none" onclick="saveEditRecord()">Save changes</button>
     </div>
   </div>
 </div>
@@ -933,6 +935,218 @@ fetchRecords();
 fetchBoats();
 fetchFish();
 fetchPkg();
+
+// ── EDIT RECORD ──────────────────────────────────────
+function openEditModal(id) {
+  var r = allRecords.find(function(x){ return x.id === id; });
+  if (!r) return;
+  currentRecord = r;
+
+  var entries = safeParseEntries(r.fishEntries);
+
+  // Build fish rows for editing
+  var fishOpts = config.fish.map(function(f){
+    return '<option value="' + f.name + '">' + f.name + '</option>';
+  }).join('');
+  var pkgOpts = config.pkg.map(function(p){
+    var lbl = p.name + (p.fee > 0 ? ' (+$' + p.fee.toFixed(2) + ')' : '');
+    return '<option value="' + p.name + '">' + lbl + '</option>';
+  }).join('');
+
+  var fishRows = entries.map(function(e, i){
+    var qtyStyle = (config.fish.find(function(f){ return f.name === e.fish; }) || {}).mode === 'perlb' ? 'display:none' : '';
+    var wtStyle  = (config.fish.find(function(f){ return f.name === e.fish; }) || {}).mode === 'perlb' ? '' : 'display:none';
+    return '<div class="edit-fish-row" id="edit-fish-' + i + '" style="background:var(--sand);border:1.5px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span style="font-size:12px;font-weight:600;color:var(--ocean);background:var(--ocean-light);padding:2px 8px;border-radius:20px">Fish #' + (i+1) + '</span>' +
+        '<button onclick="removeEditFishRow(' + i + ')" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer">X</button>' +
+      '</div>' +
+      '<div class="field" style="margin-bottom:7px"><label style="font-size:12px">Species</label>' +
+        '<select class="edit-fish-sel" onchange="onEditFishChange(' + i + ')" style="padding:8px 10px;font-size:14px">' +
+          '<option value="">-- Select --</option>' + fishOpts +
+        '</select></div>' +
+      '<div class="field edit-qty-field-' + i + '" style="margin-bottom:7px;' + qtyStyle + '">' +
+        '<label style="font-size:12px" class="edit-qty-label-' + i + '">Quantity (fish count)</label>' +
+        '<input type="number" class="edit-qty" placeholder="0" min="0" step="1" inputmode="numeric" style="padding:8px 10px;font-size:14px" oninput="calcEditPrice(' + i + ')"></div>' +
+      '<div class="field edit-wt-field-' + i + '" style="margin-bottom:7px;' + wtStyle + '">' +
+        '<label style="font-size:12px">Weight (lbs)</label>' +
+        '<input type="number" class="edit-wt" placeholder="0.0" min="0" step="0.1" inputmode="decimal" style="padding:8px 10px;font-size:14px" oninput="calcEditPrice(' + i + ')"></div>' +
+      '<div class="field" style="margin-bottom:0"><label style="font-size:12px">Packaging</label>' +
+        '<select class="edit-pkg-sel" style="padding:8px 10px;font-size:14px" onchange="calcEditPrice(' + i + ')">' + pkgOpts + '</select></div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('modal-name').textContent = 'Edit: ' + r.customer;
+  document.getElementById('modal-sub').textContent = (r.boat ? r.boat + ' / ' : '') + 'Tag(s): ' + (r.tag||'--');
+
+  document.getElementById('modal-fields').innerHTML =
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:13px;font-weight:500;color:var(--ink-mid);display:block;margin-bottom:4px">Tag number(s)</label>' +
+      '<input type="text" id="edit-tag" value="' + (r.tag||'') + '" style="width:100%;border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:15px;font-family:inherit;outline:none">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:13px;font-weight:500;color:var(--ink-mid);display:block;margin-bottom:4px">Payment status</label>' +
+      '<select id="edit-payment" style="width:100%;border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:15px;font-family:inherit;outline:none;appearance:none;background:white">' +
+        '<option value="Unpaid"' + (r.paymentStatus==='Unpaid'?' selected':'') + '>Unpaid - pays on pickup</option>' +
+        '<option value="Paid"' + (r.paymentStatus==='Paid'?' selected':'') + '>Paid - paid at drop-off</option>' +
+        '<option value="Charter"' + (r.paymentStatus==='Charter'?' selected':'') + '>Charter master will pay</option>' +
+      '</select>' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:13px;font-weight:500;color:var(--ink-mid);display:block;margin-bottom:4px">Notes</label>' +
+      '<input type="text" id="edit-notes" value="' + (r.notes||'') + '" style="width:100%;border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:15px;font-family:inherit;outline:none">' +
+    '</div>' +
+    '<div style="font-size:13px;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Fish &amp; packaging</div>' +
+    '<div id="edit-fish-list">' + fishRows + '</div>' +
+    '<button onclick="addEditFishRow()" style="width:100%;background:none;border:2px dashed var(--border-strong);border-radius:var(--radius);padding:10px;font-size:14px;font-weight:500;color:var(--ocean-mid);cursor:pointer;margin-bottom:4px">+ Add fish species</button>';
+
+  // Set values after DOM is built
+  setTimeout(function(){
+    var rows = document.querySelectorAll('.edit-fish-row');
+    entries.forEach(function(e, i){
+      if (!rows[i]) return;
+      var fishSel = rows[i].querySelector('.edit-fish-sel');
+      var qtySel  = rows[i].querySelector('.edit-qty');
+      var wtSel   = rows[i].querySelector('.edit-wt');
+      var pkgSel  = rows[i].querySelector('.edit-pkg-sel');
+      if (fishSel) fishSel.value = e.fish;
+      if (qtySel)  qtySel.value  = e.qty || '';
+      if (wtSel)   wtSel.value   = e.weight || '';
+      if (pkgSel)  pkgSel.value  = e.pkg || '';
+    });
+  }, 50);
+
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function onEditFishChange(i) {
+  var rows = document.querySelectorAll('.edit-fish-row');
+  var row = rows[i]; if (!row) return;
+  var fishName = row.querySelector('.edit-fish-sel').value;
+  var fish = config.fish.find(function(f){ return f.name === fishName; });
+  var qf = document.querySelector('.edit-qty-field-' + i);
+  var wf = document.querySelector('.edit-wt-field-' + i);
+  var ql = document.querySelector('.edit-qty-label-' + i);
+  if (!fish) { if(qf) qf.style.display='block'; if(wf) wf.style.display='none'; return; }
+  if (fish.mode === 'perlb') {
+    if(qf) qf.style.display='none'; if(wf) wf.style.display='block';
+  } else {
+    if(qf) qf.style.display='block'; if(wf) wf.style.display='none';
+    if(ql) ql.textContent = fish.mode==='limit' ? 'Quantity (limit = '+fish.limitCount+' fish)' : 'Quantity (fish count)';
+  }
+}
+
+function calcEditPrice(i) { /* prices recalculated on save */ }
+
+function removeEditFishRow(i) {
+  var rows = document.querySelectorAll('.edit-fish-row');
+  if (rows[i]) rows[i].remove();
+}
+
+function addEditFishRow() {
+  var fishOpts = config.fish.map(function(f){
+    return '<option value="' + f.name + '">' + f.name + '</option>';
+  }).join('');
+  var pkgOpts = config.pkg.map(function(p){
+    var lbl = p.name + (p.fee > 0 ? ' (+$' + p.fee.toFixed(2) + ')' : '');
+    return '<option value="' + p.name + '">' + lbl + '</option>';
+  }).join('');
+  var rows = document.querySelectorAll('.edit-fish-row');
+  var i = rows.length;
+  var div = document.createElement('div');
+  div.className = 'edit-fish-row';
+  div.id = 'edit-fish-' + i;
+  div.style.cssText = 'background:var(--sand);border:1.5px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px';
+  div.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+      '<span style="font-size:12px;font-weight:600;color:var(--ocean);background:var(--ocean-light);padding:2px 8px;border-radius:20px">Fish #' + (i+1) + '</span>' +
+      '<button onclick="this.closest(\'.edit-fish-row\').remove()" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer">X</button>' +
+    '</div>' +
+    '<div class="field" style="margin-bottom:7px"><label style="font-size:12px">Species</label>' +
+      '<select class="edit-fish-sel" style="padding:8px 10px;font-size:14px">' +
+        '<option value="">-- Select --</option>' + fishOpts + '</select></div>' +
+    '<div class="field" style="margin-bottom:7px">' +
+      '<label style="font-size:12px">Quantity (fish count)</label>' +
+      '<input type="number" class="edit-qty" placeholder="0" min="0" step="1" inputmode="numeric" style="padding:8px 10px;font-size:14px"></div>' +
+    '<div class="field" style="margin-bottom:7px;display:none">' +
+      '<label style="font-size:12px">Weight (lbs)</label>' +
+      '<input type="number" class="edit-wt" placeholder="0.0" min="0" step="0.1" inputmode="decimal" style="padding:8px 10px;font-size:14px"></div>' +
+    '<div class="field" style="margin-bottom:0"><label style="font-size:12px">Packaging</label>' +
+      '<select class="edit-pkg-sel" style="padding:8px 10px;font-size:14px">' + pkgOpts + '</select></div>';
+  document.getElementById('edit-fish-list').appendChild(div);
+}
+
+async function saveEditRecord() {
+  if (!currentRecord) return;
+
+  // Collect updated fish entries
+  var fishEntries = [];
+  document.querySelectorAll('.edit-fish-row').forEach(function(row){
+    var fishName = row.querySelector('.edit-fish-sel').value;
+    if (!fishName) return;
+    var qty    = row.querySelector('.edit-qty').value;
+    var weight = row.querySelector('.edit-wt').value;
+    var pkg    = row.querySelector('.edit-pkg-sel').value;
+
+    // Recalculate price
+    var fish = config.fish.find(function(f){ return f.name === fishName; });
+    var pkgObj = config.pkg.find(function(p){ return p.name === pkg; });
+    var base = 0;
+    if (fish) {
+      if (fish.mode === 'perlb') {
+        base = (parseFloat(weight)||0) * (fish.ratePerLb||0);
+      } else if (fish.mode === 'limit') {
+        var q = parseFloat(qty)||0;
+        base = (q > 0 && q < (fish.limitCount||0))
+          ? q * (fish.ratePerFish || ((fish.limitPrice||0)/(fish.limitCount||1)))
+          : (fish.limitPrice||0);
+      } else {
+        var q = parseFloat(qty)||0;
+        base = (fish.limitCount && q >= fish.limitCount && fish.limitPrice)
+          ? fish.limitPrice : q * (fish.ratePerFish||0);
+      }
+    }
+    var fee = (pkgObj && pkgObj.fee > 0) ? pkgObj.fee : 0;
+    var price = (base + fee) > 0 ? '$' + (base + fee).toFixed(2) : '';
+
+    fishEntries.push({fish:fishName, pkg:pkg, qty:qty, weight:weight, price:price});
+  });
+
+  if (!fishEntries.length) { showToast('Add at least one fish species'); return; }
+
+  // Calculate new total
+  var total = 0;
+  fishEntries.forEach(function(e){
+    total += parseFloat((e.price||'').replace('$','')) || 0;
+  });
+  var totalPrice = total > 0 ? '$' + total.toFixed(2) : '';
+
+  var tag     = document.getElementById('edit-tag').value.trim();
+  var payment = document.getElementById('edit-payment').value;
+  var notes   = document.getElementById('edit-notes').value.trim();
+
+  // Update local record
+  currentRecord.fishEntries   = JSON.stringify(fishEntries);
+  currentRecord.totalPrice    = totalPrice;
+  currentRecord.tag           = tag;
+  currentRecord.paymentStatus = payment;
+  currentRecord.notes         = notes;
+
+  showToast('Saving...');
+
+  // Save each changed field to sheet
+  var id = currentRecord.id;
+  try { await fetch(API + '?action=update&id=' + encodeURIComponent(id) + '&field=fishEntries&value=' + encodeURIComponent(JSON.stringify(fishEntries))); } catch(e) {}
+  try { await fetch(API + '?action=update&id=' + encodeURIComponent(id) + '&field=totalPrice&value='  + encodeURIComponent(totalPrice)); } catch(e) {}
+  try { await fetch(API + '?action=update&id=' + encodeURIComponent(id) + '&field=tag&value='         + encodeURIComponent(tag)); } catch(e) {}
+  try { await fetch(API + '?action=update&id=' + encodeURIComponent(id) + '&field=paymentStatus&value=' + encodeURIComponent(payment)); } catch(e) {}
+  try { await fetch(API + '?action=update&id=' + encodeURIComponent(id) + '&field=notes&value='       + encodeURIComponent(notes)); } catch(e) {}
+
+  closeModal({target: document.getElementById('modal-overlay')});
+  refreshViews();
+  showToast('Record updated');
+  setTimeout(fetchRecords, 1500);
+}
 
 </script>
 </body>
