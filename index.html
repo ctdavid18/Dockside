@@ -184,18 +184,19 @@ nav button.active{color:white;border-bottom-color:var(--seafoam)}
 <div class="screen" id="screen-config">
   <div class="card">
     <div class="card-title">Boats</div>
-    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Boats are shared across all devices.</p>
+    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices via Google Sheets.</p>
     <div id="boat-list"></div>
     <div class="add-row"><input type="text" id="new-boat-name" placeholder="Boat name (e.g. Sea Breeze)"><button class="btn btn-primary btn-sm" onclick="addBoat()">+ Add</button></div>
   </div>
   <div class="card">
     <div class="card-title">Fish types &amp; pricing</div>
+    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices. Tap Save settings to apply.</p>
     <div id="fish-pricing-list"></div>
     <div class="add-row"><input type="text" id="new-fish-name" placeholder="Fish name (e.g. Halibut)"><button class="btn btn-primary btn-sm" onclick="addFishType()">+ Add</button></div>
   </div>
   <div class="card">
     <div class="card-title">Packaging options</div>
-    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Add-on fees. $0.00 = included in base price.</p>
+    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices. Tap Save settings to apply.</p>
     <div id="pkg-list"></div>
     <div class="add-row"><input type="text" id="new-pkg-name" placeholder="e.g. Fillet add-on"><button class="btn btn-primary btn-sm" onclick="addPkg()">+ Add</button></div>
   </div>
@@ -223,7 +224,8 @@ var currentRecord = null;
 var fishItemCounter = 0;
 var selectedDate = today();
 
-var config = JSON.parse(localStorage.getItem('fishConfig') || 'null') || {
+var config = {
+  boats: [],
   fish: [
     {name:'Rockfish', mode:'limit',   limitCount:10, limitPrice:25.00, ratePerFish:2.50},
     {name:'Striper',  mode:'perfish', ratePerFish:5.00},
@@ -305,6 +307,32 @@ async function fetchBoats() {
     }
   } catch(e) {
     console.log('Could not fetch boats:', e);
+  }
+}
+
+async function fetchFish() {
+  try {
+    var res = await fetch(API + '?action=getfish');
+    var data = await res.json();
+    if (data.fish && data.fish.length > 0) {
+      config.fish = data.fish;
+      if (document.getElementById('screen-config').classList.contains('active')) renderConfig();
+    }
+  } catch(e) {
+    console.log('Could not fetch fish:', e);
+  }
+}
+
+async function fetchPkg() {
+  try {
+    var res = await fetch(API + '?action=getpkg');
+    var data = await res.json();
+    if (data.pkg && data.pkg.length > 0) {
+      config.pkg = data.pkg;
+      if (document.getElementById('screen-config').classList.contains('active')) renderConfig();
+    }
+  } catch(e) {
+    console.log('Could not fetch pkg:', e);
   }
 }
 
@@ -831,9 +859,26 @@ function addPkg() {
 function removePkg(i) {
   if (confirm('Remove '+config.pkg[i].name+'?')) { config.pkg.splice(i,1); renderConfig(); }
 }
-function saveConfig() {
-  localStorage.setItem('fishConfig',JSON.stringify(config));
-  populateBoatDropdown(); showToast('Settings saved');
+async function saveConfig() {
+  // Save fish types to sheet
+  try {
+    await fetch(API, {
+      method:'POST', mode:'no-cors',
+      body:JSON.stringify({action:'savefish', fish:config.fish}),
+      headers:{'Content-Type':'text/plain'}
+    });
+  } catch(e) {}
+  // Save packaging to sheet
+  try {
+    await fetch(API, {
+      method:'POST', mode:'no-cors',
+      body:JSON.stringify({action:'savepkg', pkg:config.pkg}),
+      headers:{'Content-Type':'text/plain'}
+    });
+  } catch(e) {}
+  populateBoatDropdown();
+  showToast('Settings saved');
+  setTimeout(function(){ fetchFish(); fetchPkg(); }, 1500);
 }
 var toastTimer;
 function showToast(msg) {
@@ -848,6 +893,8 @@ populateBoatDropdown();
 addFishItem();
 fetchRecords();
 fetchBoats();
+fetchFish();
+fetchPkg();
 
 </script>
 </body>
