@@ -93,7 +93,7 @@ nav button.active{color:white;border-bottom-color:var(--seafoam)}
 .today-row .tr-name{font-size:15px;font-weight:600;margin-bottom:2px}
 .today-row .tr-detail{font-size:12px;color:var(--ink-muted);line-height:1.5}
 .today-row .tr-right{text-align:right;margin-left:12px;flex-shrink:0}
-.today-row .tr-price{font-size:15px;font-weight:700;color:var(--seafoam)}
+.today-row .tr-price{font-size:20px;font-weight:700;color:var(--seafoam)}
 .today-row .tr-tag{font-size:11px;font-weight:600;color:var(--ocean);background:var(--ocean-light);padding:2px 7px;border-radius:20px;margin-top:3px;display:inline-block}
 .tr-badges{display:flex;gap:4px;justify-content:flex-end;margin-top:4px;flex-wrap:wrap}
 .pricing-item{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)}
@@ -550,7 +550,7 @@ async function submitDropoff() {
     tag:tag, dropDate:dropDate, pickDate:pickDate, paymentStatus:payment,
     notes:notes, fishEntries:JSON.stringify(fishEntries),
     totalPrice: bar.classList.contains('visible') ? (totalEl ? totalEl.textContent : '') : '',
-    status:'In', createdAt:new Date().toISOString()
+    status:'Received', createdAt:new Date().toISOString()
   };
   var ok = await pushRecord(record);
   if (ok) {
@@ -666,7 +666,7 @@ function renderToday() {
         '<div class="tr-price">' + (r.totalPrice||'--') + '</div>' +
         '<div class="tr-tag">Tag: ' + (r.tag||'--') + '</div>' +
         '<div class="tr-badges">' +
-          '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'In') + '</span>' +
+          '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'Received') + '</span>' +
           '<span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span>' +
         '</div>' +
       '</div></div>';
@@ -704,7 +704,7 @@ function renderLookup(q) {
       (r.dropDate ? '<br>Dropped: ' + formatDate(r.dropDate) : '') +
       (r.pickDate ? ' / Pickup: ' + formatDate(r.pickDate) : '') +
       '</div><div class="rr-tags">' + tags +
-      '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'In') + '</span>' +
+      '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'Received') + '</span>' +
       '<span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span>' +
       '</div></div>';
   }).join('');
@@ -728,7 +728,7 @@ function openModal(id) {
   document.getElementById('modal-fields').innerHTML =
     '<div class="modal-fish-list">' + fishRows + '</div>' +
     '<div class="modal-field"><span>Total price</span><strong>' + (r.totalPrice||'--') + '</strong></div>' +
-    '<div class="modal-field"><span>Status</span><strong><span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'In') + '</span></strong></div>' +
+    '<div class="modal-field"><span>Status</span><strong><span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'Received') + '</span></strong></div>' +
     '<div class="modal-field"><span>Payment</span><strong><span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span></strong></div>' +
     (r.dropDate ? '<div class="modal-field"><span>Drop-off</span><strong>' + formatDate(r.dropDate) + '</strong></div>' : '') +
     (r.pickDate ? '<div class="modal-field"><span>Est. pickup</span><strong>' + formatDate(r.pickDate) + '</strong></div>' : '') +
