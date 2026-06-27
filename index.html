@@ -209,12 +209,11 @@ nav button.active{color:white;border-bottom-color:var(--seafoam)}
     <div class="modal-sub" id="modal-sub"></div>
     <div id="modal-fields"></div>
     <div class="divider"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div id="modal-action-buttons" style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" onclick="markReady()">Mark ready</button>
       <button class="btn btn-secondary btn-sm" onclick="markPickedUp()">Mark picked up</button>
       <button class="btn btn-secondary btn-sm" onclick="markPaid()">Mark paid</button>
       <button class="btn btn-secondary btn-sm" onclick="openEditModal(currentRecord && currentRecord.id)">Edit record</button>
-      <button class="btn btn-success btn-sm" id="save-edit-btn" style="display:none" onclick="saveEditRecord()">Save changes</button>
     </div>
   </div>
 </div>
@@ -731,6 +730,25 @@ function renderLookup(q) {
 
 function safeParseEntries(raw) { try { return JSON.parse(raw||'[]'); } catch(e) { return []; } }
 
+function setModalButtons(mode) {
+  var el = document.getElementById('modal-action-buttons');
+  if (mode === 'edit') {
+    el.innerHTML =
+      '<button class="btn btn-success btn-sm" onclick="saveEditRecord()">Save changes</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancel</button>';
+  } else {
+    el.innerHTML =
+      '<button class="btn btn-primary btn-sm" onclick="markReady()">Mark ready</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="markPickedUp()">Mark picked up</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="markPaid()">Mark paid</button>' +
+      '<button class="btn btn-secondary btn-sm" onclick="openEditModal(currentRecord && currentRecord.id)">Edit record</button>';
+  }
+}
+
+function cancelEdit() {
+  if (currentRecord) openModal(currentRecord.id);
+}
+
 function openModal(id) {
   var r = allRecords.find(function(x){ return x.id === id; });
   if (!r) return;
@@ -753,6 +771,7 @@ function openModal(id) {
     (r.pickDate ? '<div class="modal-field"><span>Est. pickup</span><strong>' + formatDate(r.pickDate) + '</strong></div>' : '') +
     (r.phone ? '<div class="modal-field"><span>Phone</span><strong>' + r.phone + '</strong></div>' : '') +
     (r.notes ? '<div class="modal-field"><span>Notes</span><strong>' + r.notes + '</strong></div>' : '');
+  setModalButtons('view');
   document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -1016,6 +1035,7 @@ function openEditModal(id) {
     });
   }, 50);
 
+  setModalButtons('edit');
   document.getElementById('modal-overlay').classList.add('open');
 }
 
