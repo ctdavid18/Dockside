@@ -190,13 +190,13 @@ nav button.active{color:white;border-bottom-color:var(--seafoam)}
   </div>
   <div class="card">
     <div class="card-title">Fish types &amp; pricing</div>
-    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices. Tap Save settings to apply.</p>
+    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices. Tap Save settings to sync.</p>
     <div id="fish-pricing-list"></div>
     <div class="add-row"><input type="text" id="new-fish-name" placeholder="Fish name (e.g. Halibut)"><button class="btn btn-primary btn-sm" onclick="addFishType()">+ Add</button></div>
   </div>
   <div class="card">
     <div class="card-title">Packaging options</div>
-    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices. Tap Save settings to apply.</p>
+    <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Shared across all devices. Tap Save settings to sync.</p>
     <div id="pkg-list"></div>
     <div class="add-row"><input type="text" id="new-pkg-name" placeholder="e.g. Fillet add-on"><button class="btn btn-primary btn-sm" onclick="addPkg()">+ Add</button></div>
   </div>
@@ -339,11 +339,8 @@ async function fetchPkg() {
 async function pushRecord(record) {
   setSyncStatus('busy','Saving...');
   try {
-    await fetch(API, {
-      method:'POST', mode:'no-cors',
-      body:JSON.stringify({action:'add',record:record}),
-      headers:{'Content-Type':'text/plain'}
-    });
+    var url = API + '?action=addrecord&data=' + encodeURIComponent(JSON.stringify(record));
+    await fetch(url);
     setSyncStatus('ok','Saved');
     setTimeout(fetchRecords, 1500);
     return true;
@@ -356,11 +353,8 @@ async function pushRecord(record) {
 async function pushUpdate(id, field, value) {
   setSyncStatus('busy','Updating...');
   try {
-    await fetch(API, {
-      method:'POST', mode:'no-cors',
-      body:JSON.stringify({action:'update',id:id,field:field,value:value}),
-      headers:{'Content-Type':'text/plain'}
-    });
+    var url = API + '?action=update&id=' + encodeURIComponent(id) + '&field=' + encodeURIComponent(field) + '&value=' + encodeURIComponent(value);
+    await fetch(url);
     setSyncStatus('ok','Updated');
     setTimeout(fetchRecords, 1500);
   } catch(e) {
@@ -779,11 +773,7 @@ async function addBoat() {
   if (config.boats.indexOf(name)>=0) { showToast('Already in list'); return; }
   // Save to sheet
   try {
-    await fetch(API, {
-      method:'POST', mode:'no-cors',
-      body:JSON.stringify({action:'addboat', name:name}),
-      headers:{'Content-Type':'text/plain'}
-    });
+    await fetch(API + '?action=addboat&name=' + encodeURIComponent(name));
   } catch(e) {}
   config.boats.push(name);
   config.boats.sort();
@@ -795,11 +785,7 @@ async function addBoat() {
 async function removeBoat(name) {
   if (confirm('Remove '+name+'?')) {
     try {
-      await fetch(API, {
-        method:'POST', mode:'no-cors',
-        body:JSON.stringify({action:'removeboat', name:name}),
-        headers:{'Content-Type':'text/plain'}
-      });
+      await fetch(API + '?action=removeboat&name=' + encodeURIComponent(name));
     } catch(e) {}
     config.boats=config.boats.filter(function(b){ return b!==name; });
     renderConfig(); populateBoatDropdown();
@@ -862,19 +848,11 @@ function removePkg(i) {
 async function saveConfig() {
   // Save fish types to sheet
   try {
-    await fetch(API, {
-      method:'POST', mode:'no-cors',
-      body:JSON.stringify({action:'savefish', fish:config.fish}),
-      headers:{'Content-Type':'text/plain'}
-    });
+    await fetch(API + '?action=savefish&data=' + encodeURIComponent(JSON.stringify(config.fish)));
   } catch(e) {}
   // Save packaging to sheet
   try {
-    await fetch(API, {
-      method:'POST', mode:'no-cors',
-      body:JSON.stringify({action:'savepkg', pkg:config.pkg}),
-      headers:{'Content-Type':'text/plain'}
-    });
+    await fetch(API + '?action=savepkg&data=' + encodeURIComponent(JSON.stringify(config.pkg)));
   } catch(e) {}
   populateBoatDropdown();
   showToast('Settings saved');
