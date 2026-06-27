@@ -663,7 +663,7 @@ function renderToday() {
         '<div class="tr-detail">' + (r.boat ? r.boat + ' - ' : '') + species + '</div>' +
       '</div>' +
       '<div class="tr-right">' +
-        '<div class="tr-price">' + (r.totalPrice||'--') + '</div>' +
+        '<div class="tr-price">' + formatPrice(r.totalPrice) + '</div>' +
         '<div class="tr-tag">Tag: ' + (r.tag||'--') + '</div>' +
         '<div class="tr-badges">' +
           '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'Received') + '</span>' +
@@ -727,7 +727,7 @@ function openModal(id) {
   document.getElementById('modal-sub').textContent = (r.boat ? r.boat + ' / ' : '') + 'Tag(s): ' + (r.tag||'--');
   document.getElementById('modal-fields').innerHTML =
     '<div class="modal-fish-list">' + fishRows + '</div>' +
-    '<div class="modal-field"><span>Total price</span><strong>' + (r.totalPrice||'--') + '</strong></div>' +
+    '<div class="modal-field"><span>Total price</span><strong>' + formatPrice(r.totalPrice) + '</strong></div>' +
     '<div class="modal-field"><span>Status</span><strong><span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'Received') + '</span></strong></div>' +
     '<div class="modal-field"><span>Payment</span><strong><span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span></strong></div>' +
     (r.dropDate ? '<div class="modal-field"><span>Drop-off</span><strong>' + formatDate(r.dropDate) + '</strong></div>' : '') +
@@ -884,6 +884,18 @@ async function saveConfig() {
   populateBoatDropdown();
   showToast('Settings saved to all devices');
   setTimeout(function(){ fetchFish(); fetchPkg(); }, 1500);
+}
+
+function formatPrice(raw) {
+  if (!raw || raw === '--') return '--';
+  var s = String(raw).trim();
+  if (s.charAt(0) === '$') {
+    var num = parseFloat(s.replace('$',''));
+    return isNaN(num) ? s : '$' + num.toFixed(2);
+  }
+  var num = parseFloat(s);
+  if (!isNaN(num) && num > 0) return '$' + num.toFixed(2);
+  return s || '--';
 }
 
 var toastTimer;
