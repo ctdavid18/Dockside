@@ -222,7 +222,7 @@ var API = 'https://script.google.com/macros/s/AKfycbxG7OTGb4nAY3OfURwVYfA5kg4N90
 var allRecords = [];
 var currentRecord = null;
 var fishItemCounter = 0;
-var selectedDate = today();
+var selectedDate = '';
 
 var config = {
   boats: [],
@@ -258,6 +258,11 @@ function normalizeDate(raw) {
   }
   return s;
 }
+function displayDate(d) {
+  if (!d) return '';
+  var p = d.split('-');
+  return p[1] + '/' + p[2] + '/' + p[0].slice(2);
+}
 function formatDate(d) {
   if (!d) return '';
   var p = d.split('-');
@@ -271,8 +276,7 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   if (id === 'lookup') renderLookup('');
   if (id === 'today')  { selectedDate = today(); renderToday(); }
-  if (id === 'config') fetchBoats();
-  if (id === 'config') renderConfig();
+  if (id === 'config') { renderConfig(); fetchBoats(); fetchFish(); fetchPkg(); }
 }
 
 function setSyncStatus(state, msg) {
@@ -305,9 +309,7 @@ async function fetchBoats() {
       populateBoatDropdown();
       if (document.getElementById('screen-config').classList.contains('active')) renderConfig();
     }
-  } catch(e) {
-    console.log('Could not fetch boats:', e);
-  }
+  } catch(e) { console.log('Could not fetch boats:', e); }
 }
 
 async function fetchFish() {
@@ -316,11 +318,11 @@ async function fetchFish() {
     var data = await res.json();
     if (data.fish && data.fish.length > 0) {
       config.fish = data.fish;
+      rebuildFishDropdowns();
+      rebuildPkgDropdowns();
       if (document.getElementById('screen-config').classList.contains('active')) renderConfig();
     }
-  } catch(e) {
-    console.log('Could not fetch fish:', e);
-  }
+  } catch(e) { console.log('Could not fetch fish:', e); }
 }
 
 async function fetchPkg() {
@@ -329,11 +331,10 @@ async function fetchPkg() {
     var data = await res.json();
     if (data.pkg && data.pkg.length > 0) {
       config.pkg = data.pkg;
+      rebuildPkgDropdowns();
       if (document.getElementById('screen-config').classList.contains('active')) renderConfig();
     }
-  } catch(e) {
-    console.log('Could not fetch pkg:', e);
-  }
+  } catch(e) { console.log('Could not fetch pkg:', e); }
 }
 
 async function pushRecord(record) {
@@ -357,9 +358,7 @@ async function pushUpdate(id, field, value) {
     await fetch(url);
     setSyncStatus('ok','Updated');
     setTimeout(fetchRecords, 1500);
-  } catch(e) {
-    setSyncStatus('err','Update failed');
-  }
+  } catch(e) { setSyncStatus('err','Update failed'); }
 }
 
 function populateBoatDropdown() {
@@ -373,109 +372,143 @@ function populateBoatDropdown() {
   if (cur) sel.value = cur;
 }
 
+function rebuildFishDropdowns() {
+  document.querySelectorAll('.fish-item').forEach(function(item) {
+    var sel = item.querySelector('.item-fish');
+    if (!sel) return;
+    var cur = sel.value;
+    var opts = config.fish.map(function(f) {
+      return '<option value="' + f.name + '">' + f.name + '</option>';
+    }).join('');
+    sel.innerHTML = '<option value="">-- Select --</option>' + opts;
+    if (cur) sel.value = cur;
+  });
+}
+
+function rebuildPkgDropdowns() {
+  document.querySelectorAll('.fish-item').forEach(function(item) {
+    var sel = item.querySelector('.item-pkg');
+    if (!sel) return;
+    var cur = sel.value;
+    var opts = config.pkg.map(function(p) {
+      var lbl = p.name + (p.fee > 0 ? ' (+$' + p.fee.toFixed(2) + ')' : '');
+      return '<option value="' + p.name + '">' + lbl + '</option>';
+    }).join('');
+    sel.innerHTML = opts;
+    if (cur) sel.value = cur;
+  });
+}
+
 function addFishItem() {
   var id = ++fishItemCounter;
   var div = document.createElement('div');
   div.className = 'fish-item';
   div.id = 'fish-item-' + id;
   var fishOpts = config.fish.map(function(f){
-    return '<option value="'+f.name+'">'+f.name+'</option>';
+    return '<option value="' + f.name + '">' + f.name + '</option>';
   }).join('');
   var pkgOpts = config.pkg.map(function(p){
-    var lbl = p.name + (p.fee>0 ? ' (+$'+p.fee.toFixed(2)+')' : '');
-    return '<option value="'+p.name+'">'+lbl+'</option>';
+    var lbl = p.name + (p.fee > 0 ? ' (+$' + p.fee.toFixed(2) + ')' : '');
+    return '<option value="' + p.name + '">' + lbl + '</option>';
   }).join('');
   div.innerHTML =
-    '<div class="fish-item-header">'+
-      '<span class="fish-item-num">Fish #'+id+'</span>'+
-      '<span class="fish-item-price" id="item-price-'+id+'"></span>'+
-      '<button class="fish-item-remove" onclick="removeFishItem('+id+')">X</button>'+
-    '</div>'+
-    '<div class="field"><label>Species</label>'+
-      '<select class="item-fish" onchange="onFishChange('+id+')">'+
-        '<option value="">-- Select --</option>'+fishOpts+'</select></div>'+
-    '<div class="field" id="item-qty-field-'+id+'">'+
-      '<label id="item-qty-label-'+id+'">Quantity (fish count)</label>'+
-      '<input type="number" class="item-qty" placeholder="0" min="0" step="1" inputmode="numeric" oninput="calcItemPrice('+id+')"></div>'+
-    '<div class="field" id="item-wt-field-'+id+'" style="display:none">'+
-      '<label>Weight (lbs)</label>'+
-      '<input type="number" class="item-wt" placeholder="0.0" min="0" step="0.1" inputmode="decimal" oninput="calcItemPrice('+id+')"></div>'+
-    '<div class="field"><label>Packaging</label>'+
-      '<select class="item-pkg" onchange="calcItemPrice('+id+')">'+pkgOpts+'</select></div>';
+    '<div class="fish-item-header">' +
+      '<span class="fish-item-num">Fish #' + id + '</span>' +
+      '<span class="fish-item-price" id="item-price-' + id + '"></span>' +
+      '<button class="fish-item-remove" onclick="removeFishItem(' + id + ')">X</button>' +
+    '</div>' +
+    '<div class="field"><label>Species</label>' +
+      '<select class="item-fish" onchange="onFishChange(' + id + ')">' +
+        '<option value="">-- Select --</option>' + fishOpts +
+      '</select></div>' +
+    '<div class="field" id="item-qty-field-' + id + '">' +
+      '<label id="item-qty-label-' + id + '">Quantity (fish count)</label>' +
+      '<input type="number" class="item-qty" placeholder="0" min="0" step="1" inputmode="numeric" oninput="calcItemPrice(' + id + ')"></div>' +
+    '<div class="field" id="item-wt-field-' + id + '" style="display:none">' +
+      '<label>Weight (lbs)</label>' +
+      '<input type="number" class="item-wt" placeholder="0.0" min="0" step="0.1" inputmode="decimal" oninput="calcItemPrice(' + id + ')"></div>' +
+    '<div class="field"><label>Packaging</label>' +
+      '<select class="item-pkg" onchange="calcItemPrice(' + id + ')">' + pkgOpts + '</select></div>';
   document.getElementById('fish-items').appendChild(div);
-  updateItemNumbers(); recalcTotal();
+  updateItemNumbers();
+  recalcTotal();
 }
 
 function removeFishItem(id) {
-  var el = document.getElementById('fish-item-'+id);
+  var el = document.getElementById('fish-item-' + id);
   if (el) el.remove();
-  updateItemNumbers(); recalcTotal();
+  updateItemNumbers();
+  recalcTotal();
 }
 
 function updateItemNumbers() {
-  document.querySelectorAll('.fish-item').forEach(function(el,i){
+  document.querySelectorAll('.fish-item').forEach(function(el, i){
     var n = el.querySelector('.fish-item-num');
-    if (n) n.textContent = 'Fish #'+(i+1);
+    if (n) n.textContent = 'Fish #' + (i+1);
   });
 }
 
 function onFishChange(id) {
-  var item = document.getElementById('fish-item-'+id);
+  var item = document.getElementById('fish-item-' + id);
   var fishName = item.querySelector('.item-fish').value;
-  var fish = config.fish.find(function(f){ return f.name===fishName; });
-  var qf = document.getElementById('item-qty-field-'+id);
-  var wf = document.getElementById('item-wt-field-'+id);
-  var ql = document.getElementById('item-qty-label-'+id);
+  var fish = config.fish.find(function(f){ return f.name === fishName; });
+  var qf = document.getElementById('item-qty-field-' + id);
+  var wf = document.getElementById('item-wt-field-' + id);
+  var ql = document.getElementById('item-qty-label-' + id);
   if (!fish) { qf.style.display='block'; wf.style.display='none'; return; }
-  if (fish.mode==='perlb') { qf.style.display='none'; wf.style.display='block'; }
+  if (fish.mode === 'perlb') { qf.style.display='none'; wf.style.display='block'; }
   else {
     qf.style.display='block'; wf.style.display='none';
-    ql.textContent = fish.mode==='limit' ? 'Quantity (limit = '+fish.limitCount+' fish)' : 'Quantity (fish count)';
+    ql.textContent = fish.mode === 'limit'
+      ? 'Quantity (limit = ' + fish.limitCount + ' fish)'
+      : 'Quantity (fish count)';
   }
   calcItemPrice(id);
 }
 
 function calcItemPrice(id) {
-  var item = document.getElementById('fish-item-'+id);
+  var item = document.getElementById('fish-item-' + id);
   var fishName = item.querySelector('.item-fish').value;
   var pkgName  = item.querySelector('.item-pkg').value;
   var qty    = parseFloat(item.querySelector('.item-qty').value) || 0;
   var weight = parseFloat(item.querySelector('.item-wt').value) || 0;
-  var fish = config.fish.find(function(f){ return f.name===fishName; });
-  var pkg  = config.pkg.find(function(p){ return p.name===pkgName; });
-  var priceEl = document.getElementById('item-price-'+id);
+  var fish = config.fish.find(function(f){ return f.name === fishName; });
+  var pkg  = config.pkg.find(function(p){ return p.name === pkgName; });
+  var priceEl = document.getElementById('item-price-' + id);
   if (!fish) { priceEl.textContent=''; recalcTotal(); return; }
   var base = 0;
-  if (fish.mode==='perlb') {
+  if (fish.mode === 'perlb') {
     if (!weight) { priceEl.textContent=''; recalcTotal(); return; }
-    base = weight*(fish.ratePerLb||0);
-  } else if (fish.mode==='limit') {
-    base = (qty>0 && qty<(fish.limitCount||0))
-      ? qty*(fish.ratePerFish||((fish.limitPrice||0)/(fish.limitCount||1)))
-      : (fish.limitPrice||0);
-  } else if (fish.mode==='perfish') {
+    base = weight * (fish.ratePerLb || 0);
+  } else if (fish.mode === 'limit') {
+    base = (qty > 0 && qty < (fish.limitCount || 0))
+      ? qty * (fish.ratePerFish || ((fish.limitPrice||0) / (fish.limitCount||1)))
+      : (fish.limitPrice || 0);
+  } else if (fish.mode === 'perfish') {
     if (!qty) { priceEl.textContent=''; recalcTotal(); return; }
-    base = (fish.limitCount && qty>=fish.limitCount && fish.limitPrice)
-      ? fish.limitPrice : qty*(fish.ratePerFish||0);
+    base = (fish.limitCount && qty >= fish.limitCount && fish.limitPrice)
+      ? fish.limitPrice
+      : qty * (fish.ratePerFish || 0);
   }
-  var fee = (pkg && pkg.fee>0) ? pkg.fee : 0;
-  priceEl.textContent = '$'+(base+fee).toFixed(2);
+  var fee = (pkg && pkg.fee > 0) ? pkg.fee : 0;
+  priceEl.textContent = '$' + (base + fee).toFixed(2);
   recalcTotal();
 }
 
 function recalcTotal() {
-  var grand=0, lines=[];
+  var grand = 0;
+  var lines = [];
   document.querySelectorAll('.fish-item').forEach(function(item){
     var fn = item.querySelector('.item-fish').value;
-    var id = item.id.replace('fish-item-','');
-    var pt = (document.getElementById('item-price-'+id)||{}).textContent||'';
-    if (fn && pt) { grand+=parseFloat(pt.replace('$',''))||0; lines.push(fn+' '+pt); }
+    var id = item.id.replace('fish-item-', '');
+    var pt = (document.getElementById('item-price-' + id) || {}).textContent || '';
+    if (fn && pt) { grand += parseFloat(pt.replace('$','')) || 0; lines.push(fn + ' ' + pt); }
   });
   var bar = document.getElementById('total-bar');
-  if (grand>0) {
+  if (grand > 0) {
     bar.classList.add('visible');
-    document.getElementById('total-amount').textContent='$'+grand.toFixed(2);
-    document.getElementById('total-breakdown').textContent=lines.join(' / ');
+    document.getElementById('total-amount').textContent = '$' + grand.toFixed(2);
+    document.getElementById('total-breakdown').textContent = lines.join(' / ');
   } else {
     bar.classList.remove('visible');
   }
@@ -495,33 +528,34 @@ async function submitDropoff() {
   function reenable() { btn.disabled=false; btn.textContent='Save drop-off'; }
   if (!customer) { showToast('Customer name required'); return; }
   if (!tag)      { showToast('Tag number required'); return; }
-  var fishEntries=[], valid=true;
+  var fishEntries = [], valid = true;
   document.querySelectorAll('.fish-item').forEach(function(item){
     var fn = item.querySelector('.item-fish').value;
     if (!fn) { valid=false; showToast('Select a species for each entry'); return; }
-    var id = item.id.replace('fish-item-','');
+    var id = item.id.replace('fish-item-', '');
     fishEntries.push({
       fish:fn, pkg:item.querySelector('.item-pkg').value,
       qty:item.querySelector('.item-qty').value,
       weight:item.querySelector('.item-wt').value,
-      price:(document.getElementById('item-price-'+id)||{}).textContent||''
+      price:(document.getElementById('item-price-' + id)||{}).textContent||''
     });
   });
   if (!valid) return;
   if (!fishEntries.length) { showToast('Add at least one fish species'); return; }
-  btn.disabled=true; btn.textContent='Saving...';
+  btn.disabled = true; btn.textContent = 'Saving...';
+  var bar = document.getElementById('total-bar');
   var totalEl = document.getElementById('total-amount');
   var record = {
     id:Date.now().toString(), boat:boat, customer:customer, phone:phone,
     tag:tag, dropDate:dropDate, pickDate:pickDate, paymentStatus:payment,
     notes:notes, fishEntries:JSON.stringify(fishEntries),
-    totalPrice:document.getElementById('total-bar').classList.contains('visible')?(totalEl?totalEl.textContent:''):'',
+    totalPrice: bar.classList.contains('visible') ? (totalEl ? totalEl.textContent : '') : '',
     status:'In', createdAt:new Date().toISOString()
   };
   var ok = await pushRecord(record);
   if (ok) {
     allRecords.unshift(record);
-    showToast('Drop-off saved - tag '+tag);
+    showToast('Drop-off saved - tag ' + tag);
     clearForm();
   } else {
     reenable();
@@ -530,121 +564,114 @@ async function submitDropoff() {
 
 function clearForm() {
   ['customer-name','customer-phone','tag-number','notes'].forEach(function(id){
-    document.getElementById(id).value='';
+    document.getElementById(id).value = '';
   });
-  document.getElementById('boat-name').value='';
-  document.getElementById('payment-status').value='Unpaid';
-  document.getElementById('fish-items').innerHTML='';
-  fishItemCounter=0;
+  document.getElementById('boat-name').value = '';
+  document.getElementById('payment-status').value = 'Unpaid';
+  document.getElementById('fish-items').innerHTML = '';
+  fishItemCounter = 0;
   document.getElementById('total-bar').classList.remove('visible');
-  document.getElementById('dropoff-date').value=today();
-  document.getElementById('pickup-date').value=today();
-  var btn=document.getElementById('save-btn');
-  btn.disabled=false; btn.textContent='Save drop-off';
+  document.getElementById('dropoff-date').value = today();
+  document.getElementById('pickup-date').value  = today();
+  var btn = document.getElementById('save-btn');
+  btn.disabled = false; btn.textContent = 'Save drop-off';
   addFishItem();
 }
 
 function payClass(p) {
-  if (p==='Paid') return 'pay-paid';
-  if (p==='Charter') return 'pay-charter';
-  if (!p || p==='Unpaid') return 'pay-unpaid';
+  if (p === 'Paid') return 'pay-paid';
+  if (p === 'Charter') return 'pay-charter';
   return 'pay-unpaid';
 }
 function payLabel(p) {
-  if (p==='Paid') return 'Paid';
-  if (p==='Charter') return 'Charter';
+  if (p === 'Paid') return 'Paid';
+  if (p === 'Charter') return 'Charter';
   return 'Unpaid';
 }
-
-function displayDate(d) {
-  if (!d) return '';
-  var p = d.split('-');
-  return p[1] + '/' + p[2] + '/' + p[0].slice(2);
+function statusClass(s) {
+  return s === 'Ready' ? 'status-ready' : s === 'Picked up' ? 'status-done' : 'status-in';
 }
 
 function changeDate(dir) {
   var d = new Date(selectedDate + 'T12:00:00');
   d.setDate(d.getDate() + dir);
-  // Don't go past today
-  var t = today();
-  var newDate = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
-  if (newDate > t) return;
+  var m = ('0'+(d.getMonth()+1)).slice(-2);
+  var dy = ('0'+d.getDate()).slice(-2);
+  var newDate = d.getFullYear() + '-' + m + '-' + dy;
+  if (newDate > today()) return;
   selectedDate = newDate;
   renderToday();
 }
 
 function renderToday() {
   var container = document.getElementById('today-list');
-  var t = selectedDate;
-  var matches = allRecords.filter(function(r){ return normalizeDate(r.dropDate)===t; });
+  var t = selectedDate || today();
+  var matches = allRecords.filter(function(r){ return normalizeDate(r.dropDate) === t; });
   var grandTotal=0, paidTotal=0, unpaidTotal=0, charterTotal=0;
-  var boatMap={};
+  var boatMap = {};
   matches.forEach(function(r){
-    var v = parseFloat((r.totalPrice||'').replace('$',''))||0;
-    grandTotal+=v;
-    if (r.paymentStatus==='Paid') paidTotal+=v;
-    else if (r.paymentStatus==='Charter') charterTotal+=v;
-    else unpaidTotal+=v;
-    var boat=r.boat||'(No boat)';
-    if (!boatMap[boat]) boatMap[boat]={total:0,count:0};
-    boatMap[boat].total+=v; boatMap[boat].count++;
+    var v = parseFloat((r.totalPrice||'').replace('$','')) || 0;
+    grandTotal += v;
+    if (r.paymentStatus === 'Paid') paidTotal += v;
+    else if (r.paymentStatus === 'Charter') charterTotal += v;
+    else unpaidTotal += v;
+    var boat = r.boat || '(No boat)';
+    if (!boatMap[boat]) boatMap[boat] = {total:0, count:0};
+    boatMap[boat].total += v; boatMap[boat].count++;
   });
-  var countTxt = matches.length+' customer'+(matches.length!==1?'s':'');
   var isToday = (t === today());
-  var dateLabel = isToday ? 'Today - '+displayDate(t) : displayDate(t);
-  var header = '<div class="today-header">'+
-    '<button onclick="changeDate(-1)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--ocean);padding:0 8px;">&#8249;</button>'+
-    '<div style="text-align:center">'+
-      '<h2>'+dateLabel+'</h2>'+
-      '<span class="th-sub">'+countTxt+'</span>'+
-    '</div>'+
-    '<button onclick="changeDate(1)" style="background:none;border:none;font-size:20px;cursor:pointer;color:'+(isToday?'#CCC':'var(--ocean)')+';padding:0 8px;">&#8250;</button>'+
-  '</div>';
+  var dateLabel = isToday ? 'Today - ' + displayDate(t) : displayDate(t);
+  var countTxt = matches.length + ' customer' + (matches.length !== 1 ? 's' : '');
+  var header = '<div class="today-header">' +
+    '<button onclick="changeDate(-1)" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--ocean);padding:0 10px;">&#8249;</button>' +
+    '<div style="text-align:center"><h2>' + dateLabel + '</h2><span class="th-sub">' + countTxt + '</span></div>' +
+    '<button onclick="changeDate(1)" style="background:none;border:none;font-size:24px;cursor:pointer;color:' + (isToday?'#CCC':'var(--ocean)') + ';padding:0 10px;">&#8250;</button>' +
+    '</div>';
   if (!matches.length) {
-    container.innerHTML = header+'<div class="empty"><div class="icon">:)</div><p>No drop-offs recorded today yet.</p></div>';
+    container.innerHTML = header + '<div class="empty"><div class="icon">:)</div><p>No drop-offs for this date.</p></div>';
     return;
   }
-  var report = '<div class="report-grand">'+
-    '<div><div class="rg-label">Total sales today</div>'+
-    '<div class="rg-sub">'+matches.length+' drop-off'+(matches.length!==1?'s':'')+'</div></div>'+
-    '<div class="rg-amount">$'+grandTotal.toFixed(2)+'</div></div>';
-  report += '<div class="pay-summary">'+
-    '<span class="pay-pill pay-paid">Paid: $'+paidTotal.toFixed(2)+'</span>'+
-    '<span class="pay-pill pay-unpaid">Unpaid: $'+unpaidTotal.toFixed(2)+'</span>'+
-    '<span class="pay-pill pay-charter">Charter: $'+charterTotal.toFixed(2)+'</span>'+
+  var report = '<div class="report-grand">' +
+    '<div><div class="rg-label">Total sales</div>' +
+    '<div class="rg-sub">' + matches.length + ' drop-off' + (matches.length !== 1 ? 's' : '') + '</div></div>' +
+    '<div class="rg-amount">$' + grandTotal.toFixed(2) + '</div></div>';
+  report += '<div class="pay-summary">' +
+    '<span class="pay-pill pay-paid">Paid: $' + paidTotal.toFixed(2) + '</span>' +
+    '<span class="pay-pill pay-unpaid">Unpaid: $' + unpaidTotal.toFixed(2) + '</span>' +
+    '<span class="pay-pill pay-charter">Charter: $' + charterTotal.toFixed(2) + '</span>' +
     '</div>';
   var boats = Object.keys(boatMap).sort();
-  if (boats.length>1) {
+  if (boats.length > 1) {
     report += '<div class="report-card"><div class="report-title">By boat</div>';
     boats.forEach(function(boat){
-      var b=boatMap[boat];
-      report += '<div class="report-row">'+
-        '<div><div class="rr-boat">'+boat+'</div>'+
-        '<div class="rr-ct">'+b.count+' customer'+(b.count!==1?'s':'')+'</div></div>'+
-        '<div class="rr-amt">$'+b.total.toFixed(2)+'</div></div>';
+      var b = boatMap[boat];
+      report += '<div class="report-row">' +
+        '<div><div class="rr-boat">' + boat + '</div>' +
+        '<div class="rr-ct">' + b.count + ' customer' + (b.count !== 1 ? 's' : '') + '</div></div>' +
+        '<div class="rr-amt">$' + b.total.toFixed(2) + '</div></div>';
     });
     report += '</div>';
   }
   var rows = matches.map(function(r){
-    var entries=safeParseEntries(r.fishEntries);
-    var species=entries.map(function(e){
-      return e.fish+(e.qty?' x'+e.qty:'')+(e.weight?' '+e.weight+'lb':'');
+    var entries = safeParseEntries(r.fishEntries);
+    var species = entries.map(function(e){
+      return e.fish + (e.qty ? ' x'+e.qty : '') + (e.weight ? ' '+e.weight+'lb' : '');
     }).join(', ');
-    return '<div class="today-row" onclick="openModal(\''+r.id+'\')">'+
-      '<div class="tr-left">'+
-        '<div class="tr-name">'+r.customer+'</div>'+
-        '<div class="tr-detail">'+(r.boat?r.boat+' - ':'')+species+'</div>'+
-      '</div>'+
-      '<div class="tr-right">'+
-        '<div class="tr-price">'+(r.totalPrice||'--')+'</div>'+
-        '<div class="tr-tag">Tag: '+(r.tag||'--')+'</div>'+
-        '<div class="tr-badges">'+
-          '<span class="status-badge '+statusClass(r.status)+'">'+(r.status||'In')+'</span>'+
-          '<span class="status-badge '+payClass(r.paymentStatus)+'">'+payLabel(r.paymentStatus)+'</span>'+
-        '</div>'+
+    return '<div class="today-row" onclick="openModal(\'' + r.id + '\')">' +
+      '<div class="tr-left">' +
+        '<div class="tr-name">' + r.customer + '</div>' +
+        '<div class="tr-detail">' + (r.boat ? r.boat + ' - ' : '') + species + '</div>' +
+      '</div>' +
+      '<div class="tr-right">' +
+        '<div class="tr-price">' + (r.totalPrice||'--') + '</div>' +
+        '<div class="tr-tag">Tag: ' + (r.tag||'--') + '</div>' +
+        '<div class="tr-badges">' +
+          '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'In') + '</span>' +
+          '<span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span>' +
+        '</div>' +
       '</div></div>';
   }).join('');
-  container.innerHTML = header+report+rows;
+  container.innerHTML = header + report + rows;
 }
 
 function doSearch(q) { renderLookup(q); }
@@ -654,88 +681,87 @@ function renderLookup(q) {
   var term = q.toLowerCase().trim();
   var matches = term
     ? allRecords.filter(function(r){
-        return (r.customer||'').toLowerCase().includes(term)||
-               (r.boat||'').toLowerCase().includes(term)||
+        return (r.customer||'').toLowerCase().includes(term) ||
+               (r.boat||'').toLowerCase().includes(term) ||
                (r.tag||'').toLowerCase().includes(term);
       })
     : allRecords;
   if (!matches.length) {
-    container.innerHTML='<div class="empty"><div class="icon">?</div><p>'+(term?'No results found':'No drop-offs yet')+'</p></div>';
+    container.innerHTML = '<div class="empty"><div class="icon">?</div><p>' + (term ? 'No results found' : 'No drop-offs yet') + '</p></div>';
     return;
   }
   container.innerHTML = matches.map(function(r){
-    var entries=safeParseEntries(r.fishEntries);
-    var species=entries.map(function(e){ return e.fish; }).join(', ');
-    var tags=(r.tag||'').split(',').map(function(t){
-      return '<span class="rr-tag">Tag: '+t.trim()+'</span>';
+    var entries = safeParseEntries(r.fishEntries);
+    var species = entries.map(function(e){ return e.fish; }).join(', ');
+    var tags = (r.tag||'').split(',').map(function(t){
+      return '<span class="rr-tag">Tag: ' + t.trim() + '</span>';
     }).join('');
-    return '<div class="result-row" onclick="openModal(\''+r.id+'\')">'+
-      '<div class="rr-top"><div class="rr-name">'+r.customer+'</div>'+
-      '<div class="rr-price">'+(r.totalPrice||'--')+'</div></div>'+
-      '<div class="rr-meta">'+(r.boat?'Boat: '+r.boat+'<br>':'')+
-      'Fish: '+(species||'--')+
-      (r.dropDate?'<br>Dropped: '+formatDate(r.dropDate):'')+
-      (r.pickDate?' / Pickup: '+formatDate(r.pickDate):'')+
-      '</div><div class="rr-tags">'+tags+
-      '<span class="status-badge '+statusClass(r.status)+'">'+(r.status||'In')+'</span>'+
-      '<span class="status-badge '+payClass(r.paymentStatus)+'">'+payLabel(r.paymentStatus)+'</span>'+
+    return '<div class="result-row" onclick="openModal(\'' + r.id + '\')">' +
+      '<div class="rr-top"><div class="rr-name">' + r.customer + '</div>' +
+      '<div class="rr-price">' + (r.totalPrice||'--') + '</div></div>' +
+      '<div class="rr-meta">' + (r.boat ? 'Boat: ' + r.boat + '<br>' : '') +
+      'Fish: ' + (species||'--') +
+      (r.dropDate ? '<br>Dropped: ' + formatDate(r.dropDate) : '') +
+      (r.pickDate ? ' / Pickup: ' + formatDate(r.pickDate) : '') +
+      '</div><div class="rr-tags">' + tags +
+      '<span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'In') + '</span>' +
+      '<span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span>' +
       '</div></div>';
   }).join('');
 }
 
 function safeParseEntries(raw) { try { return JSON.parse(raw||'[]'); } catch(e) { return []; } }
-function statusClass(s) { return s==='Ready'?'status-ready':s==='Picked up'?'status-done':'status-in'; }
 
 function openModal(id) {
-  var r = allRecords.find(function(x){ return x.id===id; });
+  var r = allRecords.find(function(x){ return x.id === id; });
   if (!r) return;
   currentRecord = r;
-  var entries=safeParseEntries(r.fishEntries);
-  var fishRows=entries.map(function(e){
-    return '<div class="modal-fish-row">'+
-      '<div class="mfr-top"><span>'+e.fish+'</span><span>'+(e.price||'--')+'</span></div>'+
-      '<div class="mfr-sub">'+(e.qty?e.qty+' fish':'')+
-      (e.weight?' '+e.weight+' lbs':'')+(e.pkg?' / '+e.pkg:'')+'</div></div>';
+  var entries = safeParseEntries(r.fishEntries);
+  var fishRows = entries.map(function(e){
+    return '<div class="modal-fish-row">' +
+      '<div class="mfr-top"><span>' + e.fish + '</span><span>' + (e.price||'--') + '</span></div>' +
+      '<div class="mfr-sub">' + (e.qty ? e.qty+' fish' : '') +
+      (e.weight ? ' '+e.weight+' lbs' : '') + (e.pkg ? ' / '+e.pkg : '') + '</div></div>';
   }).join('');
-  document.getElementById('modal-name').textContent=r.customer;
-  document.getElementById('modal-sub').textContent=(r.boat?r.boat+' / ':'')+'Tag(s): '+(r.tag||'--');
-  document.getElementById('modal-fields').innerHTML=
-    '<div class="modal-fish-list">'+fishRows+'</div>'+
-    '<div class="modal-field"><span>Total price</span><strong>'+(r.totalPrice||'--')+'</strong></div>'+
-    '<div class="modal-field"><span>Status</span><strong><span class="status-badge '+statusClass(r.status)+'">'+(r.status||'In')+'</span></strong></div>'+
-    '<div class="modal-field"><span>Payment</span><strong><span class="status-badge '+payClass(r.paymentStatus)+'">'+payLabel(r.paymentStatus)+'</span></strong></div>'+
-    (r.dropDate?'<div class="modal-field"><span>Drop-off</span><strong>'+formatDate(r.dropDate)+'</strong></div>':'')+
-    (r.pickDate?'<div class="modal-field"><span>Est. pickup</span><strong>'+formatDate(r.pickDate)+'</strong></div>':'')+
-    (r.phone?'<div class="modal-field"><span>Phone</span><strong>'+r.phone+'</strong></div>':'')+
-    (r.notes?'<div class="modal-field"><span>Notes</span><strong>'+r.notes+'</strong></div>':'');
+  document.getElementById('modal-name').textContent = r.customer;
+  document.getElementById('modal-sub').textContent = (r.boat ? r.boat + ' / ' : '') + 'Tag(s): ' + (r.tag||'--');
+  document.getElementById('modal-fields').innerHTML =
+    '<div class="modal-fish-list">' + fishRows + '</div>' +
+    '<div class="modal-field"><span>Total price</span><strong>' + (r.totalPrice||'--') + '</strong></div>' +
+    '<div class="modal-field"><span>Status</span><strong><span class="status-badge ' + statusClass(r.status) + '">' + (r.status||'In') + '</span></strong></div>' +
+    '<div class="modal-field"><span>Payment</span><strong><span class="status-badge ' + payClass(r.paymentStatus) + '">' + payLabel(r.paymentStatus) + '</span></strong></div>' +
+    (r.dropDate ? '<div class="modal-field"><span>Drop-off</span><strong>' + formatDate(r.dropDate) + '</strong></div>' : '') +
+    (r.pickDate ? '<div class="modal-field"><span>Est. pickup</span><strong>' + formatDate(r.pickDate) + '</strong></div>' : '') +
+    (r.phone ? '<div class="modal-field"><span>Phone</span><strong>' + r.phone + '</strong></div>' : '') +
+    (r.notes ? '<div class="modal-field"><span>Notes</span><strong>' + r.notes + '</strong></div>' : '');
   document.getElementById('modal-overlay').classList.add('open');
 }
 
 function closeModal(e) {
-  if (!e||e.target===document.getElementById('modal-overlay')||e.currentTarget.id==='modal-close') {
+  if (!e || e.target === document.getElementById('modal-overlay') || e.currentTarget.id === 'modal-close') {
     document.getElementById('modal-overlay').classList.remove('open');
-    currentRecord=null;
+    currentRecord = null;
   }
 }
 
 function markReady() {
   if (!currentRecord) return;
-  currentRecord.status='Ready';
-  pushUpdate(currentRecord.id,'status','Ready');
+  currentRecord.status = 'Ready';
+  pushUpdate(currentRecord.id, 'status', 'Ready');
   refreshViews(); closeModal({target:document.getElementById('modal-overlay')});
   showToast('Marked ready for pickup');
 }
 function markPickedUp() {
   if (!currentRecord) return;
-  currentRecord.status='Picked up';
-  pushUpdate(currentRecord.id,'status','Picked up');
+  currentRecord.status = 'Picked up';
+  pushUpdate(currentRecord.id, 'status', 'Picked up');
   refreshViews(); closeModal({target:document.getElementById('modal-overlay')});
   showToast('Marked as picked up');
 }
 function markPaid() {
   if (!currentRecord) return;
-  currentRecord.paymentStatus='Paid';
-  pushUpdate(currentRecord.id,'paymentStatus','Paid');
+  currentRecord.paymentStatus = 'Paid';
+  pushUpdate(currentRecord.id, 'paymentStatus', 'Paid');
   refreshViews(); closeModal({target:document.getElementById('modal-overlay')});
   showToast('Marked as paid');
 }
@@ -745,128 +771,133 @@ function refreshViews() {
 }
 
 function renderConfig() {
-  var boats=(config.boats||[]).slice().sort();
+  var boats = (config.boats||[]).slice().sort();
   document.getElementById('boat-list').innerHTML = boats.length
     ? boats.map(function(b){
-        return '<div class="pricing-item"><div class="pi-name">'+b+'</div>'+
-          '<button class="pi-delete" onclick="removeBoat(\''+b+'\')">X</button></div>';
+        return '<div class="pricing-item"><div class="pi-name">' + b + '</div>' +
+          '<button class="pi-delete" onclick="removeBoat(\'' + b + '\')">X</button></div>';
       }).join('')
     : '<p style="font-size:13px;color:var(--ink-muted)">No boats yet.</p>';
+
   document.getElementById('fish-pricing-list').innerHTML = config.fish.map(function(f,i){
-    return '<div class="pricing-item"><div><div class="pi-name">'+f.name+'</div>'+
-      '<div class="pi-sub">'+pricingDesc(f)+'</div></div>'+
-      '<div class="pi-rate">'+pricingInput(f,i)+
-      '<button class="pi-delete" onclick="removeFish('+i+')">X</button></div></div>';
+    return '<div class="pricing-item"><div><div class="pi-name">' + f.name + '</div>' +
+      '<div class="pi-sub">' + pricingDesc(f) + '</div></div>' +
+      '<div class="pi-rate">' + pricingInput(f,i) +
+      '<button class="pi-delete" onclick="removeFish(' + i + ')">X</button></div></div>';
   }).join('');
+
   document.getElementById('pkg-list').innerHTML = config.pkg.map(function(p,i){
-    return '<div class="pricing-item"><div class="pi-name">'+p.name+'</div>'+
-      '<div class="pi-rate"><span style="font-size:12px;color:var(--ink-muted)">+$</span>'+
-      '<input type="number" value="'+p.fee.toFixed(2)+'" step="0.01" min="0" '+
-        'onchange="config.pkg['+i+'].fee=parseFloat(this.value)||0">'+
-      '<button class="pi-delete" onclick="removePkg('+i+')">X</button></div></div>';
+    return '<div class="pricing-item"><div class="pi-name">' + p.name + '</div>' +
+      '<div class="pi-rate"><span style="font-size:12px;color:var(--ink-muted)">+$</span>' +
+      '<input type="number" value="' + p.fee.toFixed(2) + '" step="0.01" min="0" ' +
+        'onchange="config.pkg[' + i + '].fee=parseFloat(this.value)||0">' +
+      '<button class="pi-delete" onclick="removePkg(' + i + ')">X</button></div></div>';
   }).join('');
 }
+
 async function addBoat() {
-  var name=document.getElementById('new-boat-name').value.trim();
+  var name = document.getElementById('new-boat-name').value.trim();
   if (!name) return;
-  if (!config.boats) config.boats=[];
-  if (config.boats.indexOf(name)>=0) { showToast('Already in list'); return; }
-  // Save to sheet
-  try {
-    await fetch(API + '?action=addboat&name=' + encodeURIComponent(name));
-  } catch(e) {}
+  if (!config.boats) config.boats = [];
+  if (config.boats.indexOf(name) >= 0) { showToast('Already in list'); return; }
+  try { await fetch(API + '?action=addboat&name=' + encodeURIComponent(name)); } catch(e) {}
   config.boats.push(name);
   config.boats.sort();
-  document.getElementById('new-boat-name').value='';
-  renderConfig(); populateBoatDropdown(); showToast('Added '+name);
-  // Refresh from sheet after short delay to confirm
+  document.getElementById('new-boat-name').value = '';
+  renderConfig(); populateBoatDropdown();
+  showToast('Added ' + name);
   setTimeout(fetchBoats, 1500);
 }
+
 async function removeBoat(name) {
-  if (confirm('Remove '+name+'?')) {
-    try {
-      await fetch(API + '?action=removeboat&name=' + encodeURIComponent(name));
-    } catch(e) {}
-    config.boats=config.boats.filter(function(b){ return b!==name; });
+  if (confirm('Remove ' + name + '?')) {
+    try { await fetch(API + '?action=removeboat&name=' + encodeURIComponent(name)); } catch(e) {}
+    config.boats = config.boats.filter(function(b){ return b !== name; });
     renderConfig(); populateBoatDropdown();
     setTimeout(fetchBoats, 1500);
   }
 }
-function changeFishMode(i,mode) { config.fish[i].mode=mode; renderConfig(); }
+
+function changeFishMode(i, mode) { config.fish[i].mode = mode; renderConfig(); }
+
 function pricingDesc(f) {
-  if (f.mode==='perlb') return 'Per pound';
-  if (f.mode==='limit') return 'Limit of '+f.limitCount+' = $'+(f.limitPrice||0).toFixed(2)+' flat';
-  if (f.mode==='perfish') {
-    var d='$'+(f.ratePerFish||0).toFixed(2)+'/fish';
-    if (f.limitCount&&f.limitPrice) d+=' / Limit '+f.limitCount+' = $'+f.limitPrice.toFixed(2);
+  if (f.mode === 'perlb') return 'Per pound';
+  if (f.mode === 'limit') return 'Limit of ' + f.limitCount + ' = $' + (f.limitPrice||0).toFixed(2) + ' flat';
+  if (f.mode === 'perfish') {
+    var d = '$' + (f.ratePerFish||0).toFixed(2) + '/fish';
+    if (f.limitCount && f.limitPrice) d += ' / Limit ' + f.limitCount + ' = $' + f.limitPrice.toFixed(2);
     return d;
   }
   return '';
 }
-function pricingInput(f,i) {
-  var sel='<select style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 6px;background:white;margin-right:4px" '+
-    'onchange="changeFishMode('+i+',this.value)">'+
-    '<option value="perfish"'+(f.mode==='perfish'?' selected':'')+'>Per fish</option>'+
-    '<option value="limit"'+(f.mode==='limit'?' selected':'')+'>Limit</option>'+
-    '<option value="perlb"'+(f.mode==='perlb'?' selected':'')+'>Per lb</option>'+
+
+function pricingInput(f, i) {
+  var sel = '<select style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 6px;background:white;margin-right:4px" ' +
+    'onchange="changeFishMode(' + i + ',this.value)">' +
+    '<option value="perfish"' + (f.mode==='perfish'?' selected':'') + '>Per fish</option>' +
+    '<option value="limit"'  + (f.mode==='limit'  ?' selected':'') + '>Limit</option>' +
+    '<option value="perlb"'  + (f.mode==='perlb'  ?' selected':'') + '>Per lb</option>' +
     '</select>';
-  var inp='';
-  if (f.mode==='perlb') inp='<span style="font-size:12px;color:var(--ink-muted)">$</span>'+
-    '<input type="number" value="'+(f.ratePerLb||0).toFixed(2)+'" step="0.01" min="0" '+
-    'onchange="config.fish['+i+'].ratePerLb=parseFloat(this.value)||0">'+
+  var inp = '';
+  if (f.mode === 'perlb') inp = '<span style="font-size:12px;color:var(--ink-muted)">$</span>' +
+    '<input type="number" value="' + (f.ratePerLb||0).toFixed(2) + '" step="0.01" min="0" ' +
+    'onchange="config.fish[' + i + '].ratePerLb=parseFloat(this.value)||0">' +
     '<span style="font-size:12px;color:var(--ink-muted)">/lb</span>';
-  else if (f.mode==='limit') inp='<span style="font-size:12px;color:var(--ink-muted)">$</span>'+
-    '<input type="number" value="'+(f.limitPrice||0).toFixed(2)+'" step="0.01" min="0" '+
-    'onchange="config.fish['+i+'].limitPrice=parseFloat(this.value)||0">'+
+  else if (f.mode === 'limit') inp = '<span style="font-size:12px;color:var(--ink-muted)">$</span>' +
+    '<input type="number" value="' + (f.limitPrice||0).toFixed(2) + '" step="0.01" min="0" ' +
+    'onchange="config.fish[' + i + '].limitPrice=parseFloat(this.value)||0">' +
     '<span style="font-size:12px;color:var(--ink-muted)">flat</span>';
-  else inp='<span style="font-size:12px;color:var(--ink-muted)">$</span>'+
-    '<input type="number" value="'+(f.ratePerFish||0).toFixed(2)+'" step="0.01" min="0" '+
-    'onchange="config.fish['+i+'].ratePerFish=parseFloat(this.value)||0">'+
+  else inp = '<span style="font-size:12px;color:var(--ink-muted)">$</span>' +
+    '<input type="number" value="' + (f.ratePerFish||0).toFixed(2) + '" step="0.01" min="0" ' +
+    'onchange="config.fish[' + i + '].ratePerFish=parseFloat(this.value)||0">' +
     '<span style="font-size:12px;color:var(--ink-muted)">/fish</span>';
-  return sel+inp;
+  return sel + inp;
 }
+
 function addFishType() {
-  var name=document.getElementById('new-fish-name').value.trim();
+  var name = document.getElementById('new-fish-name').value.trim();
   if (!name) return;
-  config.fish.push({name:name,mode:'perfish',ratePerFish:0});
-  document.getElementById('new-fish-name').value='';
-  renderConfig(); showToast('Added '+name);
+  config.fish.push({name:name, mode:'perfish', ratePerFish:0});
+  document.getElementById('new-fish-name').value = '';
+  renderConfig();
+  showToast('Added ' + name + ' - tap Save settings to sync');
 }
 function removeFish(i) {
-  if (confirm('Remove '+config.fish[i].name+'?')) { config.fish.splice(i,1); renderConfig(); }
+  if (confirm('Remove ' + config.fish[i].name + '?')) { config.fish.splice(i,1); renderConfig(); }
 }
 function addPkg() {
-  var name=document.getElementById('new-pkg-name').value.trim();
+  var name = document.getElementById('new-pkg-name').value.trim();
   if (!name) return;
-  config.pkg.push({name:name,fee:0});
-  document.getElementById('new-pkg-name').value='';
-  renderConfig(); showToast('Added '+name);
+  config.pkg.push({name:name, fee:0});
+  document.getElementById('new-pkg-name').value = '';
+  renderConfig();
+  showToast('Added ' + name + ' - tap Save settings to sync');
 }
 function removePkg(i) {
-  if (confirm('Remove '+config.pkg[i].name+'?')) { config.pkg.splice(i,1); renderConfig(); }
+  if (confirm('Remove ' + config.pkg[i].name + '?')) { config.pkg.splice(i,1); renderConfig(); }
 }
+
 async function saveConfig() {
-  // Save fish types to sheet
-  try {
-    await fetch(API + '?action=savefish&data=' + encodeURIComponent(JSON.stringify(config.fish)));
-  } catch(e) {}
-  // Save packaging to sheet
-  try {
-    await fetch(API + '?action=savepkg&data=' + encodeURIComponent(JSON.stringify(config.pkg)));
-  } catch(e) {}
+  showToast('Saving...');
+  try { await fetch(API + '?action=savefish&data=' + encodeURIComponent(JSON.stringify(config.fish))); } catch(e) {}
+  try { await fetch(API + '?action=savepkg&data='  + encodeURIComponent(JSON.stringify(config.pkg)));  } catch(e) {}
   populateBoatDropdown();
-  showToast('Settings saved');
+  showToast('Settings saved to all devices');
   setTimeout(function(){ fetchFish(); fetchPkg(); }, 1500);
 }
+
 var toastTimer;
 function showToast(msg) {
-  var t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(function(){ t.classList.remove('show'); },2800);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2800);
 }
-document.getElementById('dropoff-date').value=today();
-document.getElementById('pickup-date').value=today();
+
+// INIT
+selectedDate = today();
+document.getElementById('dropoff-date').value = today();
+document.getElementById('pickup-date').value  = today();
 populateBoatDropdown();
 addFishItem();
 fetchRecords();
